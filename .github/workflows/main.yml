@@ -1,0 +1,134 @@
+name: RDP
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  secure-rdp:
+    runs-on: windows-2022
+    timeout-minutes: 3600
+
+    steps:
+
+      #######################################
+      # HABILITAR RDP + CONFIG SEGURA
+      #######################################
+      - name: Configure RDP
+        run: |
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' `
+            -Name "fDenyTSConnections" -Value 0 -Force
+
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' `
+            -Name "UserAuthentication" -Value 0 -Force
+
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' `
+            -Name "SecurityLayer" -Value 0 -Force
+
+          netsh advfirewall firewall delete rule name="RDP-Tailscale" | Out-Null
+          netsh advfirewall firewall add rule name="RDP-Tailscale" dir=in action=allow protocol=TCP localport=3389
+
+          Restart-Service -Name TermService -Force
+
+      #######################################
+      # CREAR USUARIO RDP
+      #######################################
+      - name: Create RDP User
+        run: |
+          $password = "FLP4600@@"
+          $secure = ConvertTo-SecureString $password -AsPlainText -Force
+
+          if (Get-LocalUser -Name "Floppato" -ErrorAction SilentlyContinue) {
+            Remove-LocalUser -Name "Floppato"
+          }
+
+          New-LocalUser -Name "Floppato" -Password $secure -AccountNeverExpires
+          Add-LocalGroupMember -Group "Administrators" -Member "Floppato"
+          Add-LocalGroupMember -Group "Remote Desktop Users" -Member "Floppato"
+
+      #######################################
+      # TAILSCALE
+      #######################################
+      - name: Install Tailscale
+        run: |
+          $url = "https://pkgs.tailscale.com/stable/tailscale-setup-1.82.0-amd64.msi"
+          $path = "$env:TEMP\ts.msi"
+
+          Invoke-WebRequest -Uri $url -OutFile $path
+          Start-Process msiexec.exe -ArgumentList "/i `"$path`" /quiet /norestart" -Wait
+          Remove-Item $path -Force
+
+      - name: Connect Tailscale
+        run: |
+          & "$env:ProgramFiles\Tailscale\tailscale.exe" up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=runner-$env:GITHUB_RUN_ID
+
+          for ($i = 0; $i -lt 10; $i++) {
+            $ip = & "$env:ProgramFiles\Tailscale\tailscale.exe" ip -4
+            if ($ip) {
+              echo "TAILSCALE_IP=$ip" >> $env:GITHUB_ENV
+              Write-Host "Tailscale IP: $ip"
+              exit 0
+            }
+            Start-Sleep -Seconds 5
+          }
+
+          Write-Error "ERROR: Tailscale IP no asignada"
+          exit 1
+
+      #######################################
+      # VERIFICAR RDP
+      #######################################
+      - name: Verify RDP
+        run: |
+          $test = Test-NetConnection -ComputerName $env:TAILSCALE_IP -Port 3389
+          if (-not $test.TcpTestSucceeded) {
+            Write-Error "Puerto 3389 cerrado"
+            exit 1
+          }
+          Write-Host "RDP OK"
+
+      #######################################
+      # MANTENER RDP + AUTO-RESTART
+      #######################################
+      - name: Maintain RDP
+        run: |
+          Write-Host ""
+          Write-Host "======= RDP ACCESS ======="
+          Write-Host "Address : $env:TAILSCALE_IP"
+          Write-Host "User    : Floppato"
+          Write-Host "Password: FLP4600@@"
+          Write-Host "=========================="
+          Write-Host ""
+
+          $limit = (Get-Date).AddHours(5).AddMinutes(40)
+
+          while ($true) {
+
+            if ((Get-Date) -ge $limit) {
+
+              Write-Host "Tiempo agotado — reiniciando workflow..."
+
+              $headers = @{
+                "Accept"        = "application/vnd.github+json"
+                "Authorization" = "Bearer $env:GITHUB_TOKEN"
+              }
+
+              $body = @{
+                ref = "main"
+              } | ConvertTo-Json
+
+              Invoke-RestMethod -Method Post `
+                -Uri "https://api.github.com/repos/${env:GITHUB_REPOSITORY}/actions/workflows/RDP.yml/dispatches" `
+                -Headers $headers `
+                -ContentType "application/json" `
+                -Body $body
+
+              exit 0
+            }
+
+            Write-Host "[$(Get-Date)] RDP activo — esperando..."
+            Start-Sleep -Seconds 300
+          }
