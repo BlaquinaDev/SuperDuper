@@ -89,6 +89,18 @@ jobs:
             exit 1
           }
           Write-Host "RDP OK"
+          # Desactivar cierre de sesión por inactividad
+          Set-ItemProperty `
+             -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services" `
+              -Name "MaxIdleTime" -Value 0 -Type DWord -Force
+
+          Set-ItemProperty `
+              -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services" `
+              -Name "MaxDisconnectionTime" -Value 0 -Type DWord -Force
+
+          Set-ItemProperty `
+              -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services" `
+              -Name "MaxConnectionTime" -Value 0 -Type DWord -Force
 
       #######################################
       # MANTENER RDP + AUTO-RESTART
