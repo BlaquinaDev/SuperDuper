@@ -15,19 +15,22 @@ jobs:
     steps:
 
       #######################################
-      # HABILITAR RDP + CONFIG SEGURA
+      # HABILITAR RDP + CONFIG SEGURA (COMPATIBLE CON aRDP)
       #######################################
       - name: Configure RDP
         run: |
+          # Habilitar conexiones de Escritorio Remoto
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' `
             -Name "fDenyTSConnections" -Value 0 -Force
 
+          # Habilitar NLA (1) y TLS (2) para que aRDP y apps de terceros puedan negociar la seguridad
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' `
-            -Name "UserAuthentication" -Value 0 -Force
+            -Name "UserAuthentication" -Value 1 -Force
 
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' `
-            -Name "SecurityLayer" -Value 0 -Force
+            -Name "SecurityLayer" -Value 2 -Force
 
+          # Regla de Firewall limpia
           netsh advfirewall firewall delete rule name="RDP-Tailscale" | Out-Null
           netsh advfirewall firewall add rule name="RDP-Tailscale" dir=in action=allow protocol=TCP localport=3389
 
@@ -63,7 +66,11 @@ jobs:
 
       - name: Connect Tailscale
         run: |
-          & "$env:ProgramFiles\Tailscale\tailscale.exe" up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=runner-$env:GITHUB_RUN_ID
+          # Generamos un nombre de host limpio
+          $hostname = "runner-$env:GITHUB_RUN_ID"
+          echo "TS_HOSTNAME=$hostname" >> $env:GITHUB_ENV
+
+          & "$env:ProgramFiles\Tailscale\tailscale.exe" up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=$hostname
 
           for ($i = 0; $i -lt 10; $i++) {
             $ip = & "$env:ProgramFiles\Tailscale\tailscale.exe" ip -4
@@ -79,7 +86,7 @@ jobs:
           exit 1
 
       #######################################
-      # VERIFICAR RDP
+      # VERIFICAR RDP Y DESACTIVAR TIMEOUTS
       #######################################
       - name: Verify RDP
         run: |
@@ -89,6 +96,7 @@ jobs:
             exit 1
           }
           Write-Host "RDP OK"
+          
           # Desactivar cierre de sesión por inactividad
           Set-ItemProperty `
              -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services" `
@@ -103,29 +111,39 @@ jobs:
               -Name "MaxConnectionTime" -Value 0 -Type DWord -Force
 
       #######################################
-      # MANTENER RDP + AUTO-RESTART
+      # MANTENER RDP + DIAGNÓSTICO TOTAL
       #######################################
       - name: Maintain RDP
         run: |
+          # Obtener información extra de depuración
+          $port = (Get-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp').PortNumber
+          
           Write-Host ""
-          Write-Host "======= RDP ACCESS ======="
-          Write-Host "Address : $env:TAILSCALE_IP"
-          Write-Host "User    : Floppato"
-          Write-Host "Password: FLP4600@@"
-          Write-Host "=========================="
+          Write-Host "=================================================="
+          Write-Host "               ======= RDP ACCESS ======="
+          Write-Host "=================================================="
+          Write-Host "IP Address (IPv4) : $env:TAILSCALE_IP"
+          Write-Host "Tailscale Hostname: $env:TS_HOSTNAME"
+          Write-Host "RDP Port          : $port"
+          Write-Host "User              : Floppato"
+          Write-Host "Password          : FLP4600@@"
+          Write-Host "--------------------------------------------------"
+          Write-Host "PARA aRDP (Android):"
+          Write-Host " -> En 'PC Address' pon: $env:TAILSCALE_IP"
+          Write-Host " -> O intenta con Hostname: $env:TS_HOSTNAME"
+          Write-Host " -> Asegúrate de que la app Tailscale esté conectada en tu móvil."
+          Write-Host "=================================================="
           Write-Host ""
 
           $limit = (Get-Date).AddHours(5).AddMinutes(40)
 
           while ($true) {
-
             if ((Get-Date) -ge $limit) {
-
               Write-Host "Tiempo agotado — reiniciando workflow..."
 
               $headers = @{
                 "Accept"        = "application/vnd.github+json"
-                "Authorization" = "Bearer $env:GITHUB_TOKEN"
+                "Authorization" = "Bearer ${{ secrets.GITHUB_TOKEN }}"
               }
 
               $body = @{
