@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   secure-rdp:
-    runs-on: windows-2022
+    runs-on: windows-latest
     timeout-minutes: 3600
 
     steps:
