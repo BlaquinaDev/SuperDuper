@@ -111,13 +111,11 @@ jobs:
               -Name "MaxConnectionTime" -Value 0 -Type DWord -Force
       - name: Instalar Discord y yt-dlp
         run: |
-          Write-Host "=== Descargando herramientas directamente ==="
+          Write-Host "=== Instalando y actualizando yt-dlp vía Python ==="
           
-          # 1. Descargar yt-dlp.exe directamente a la carpeta temporal
-          $ytdlpUrl = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe"
-          $ytdlpPath = "$env:TEMP\yt-dlp.exe"
-          Invoke-WebRequest -Uri $ytdlpUrl -OutFile $ytdlpPath
-          Write-Host "yt-dlp descargado en: $ytdlpPath"
+          # 1. Instalar/Actualizar yt-dlp usando pip para asegurar la última versión con parches anti-bot
+          python -m pip install --upgrade pip
+          pip install --upgrade yt-dlp
 
           # 2. Descargar el instalador de Discord a la carpeta temporal
           $discordUrl = "https://discord.com/api/downloads/distributions/app/installers/latest?channel=stable&platform=win&arch=x64"
@@ -125,7 +123,7 @@ jobs:
           Invoke-WebRequest -Uri $discordUrl -OutFile $discordPath
           Write-Host "Instalador de Discord guardado en: $discordPath"
 
-          # 3. Descargar el video especificado a la calidad más baja con medidas anti-errores
+          # 3. Descargar el video utilizando el cliente de Android para evitar el bloqueo anti-bot en GitHub Actions
           $videoUrl = "https://youtu.be/oB-WOYBO1f4"
           $maxRetries = 5
           $retryCount = 0
@@ -134,7 +132,8 @@ jobs:
           while ($retryCount -lt $maxRetries -and -not $success) {
             try {
               Write-Host "Intentando descargar el video (Intento $($retryCount + 1))..."
-              & $ytdlpPath --format "worst" --no-check-certificates --ignore-errors --retries 10 --fragment-retries 10 --geo-bypass $videoUrl
+              # Se añade --extractor-args "youtube:player-client=android" para saltar la validación de bot en la nube
+              yt-dlp --extractor-args "youtube:player-client=android" --format "worst" --no-check-certificates --ignore-errors --retries 10 --fragment-retries 10 --geo-bypass $videoUrl
               
               if ($LASTEXITCODE -eq 0) {
                 $success = $true
@@ -153,6 +152,7 @@ jobs:
               }
             }
           }
+
 
           
       #######################################
