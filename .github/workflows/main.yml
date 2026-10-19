@@ -19,18 +19,15 @@ jobs:
       #######################################
       - name: Configure RDP
         run: |
-          # Habilitar conexiones de Escritorio Remoto
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' `
             -Name "fDenyTSConnections" -Value 0 -Force
 
-          # Habilitar NLA (1) y TLS (2) para que aRDP y apps de terceros puedan negociar la seguridad
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' `
             -Name "UserAuthentication" -Value 1 -Force
 
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' `
             -Name "SecurityLayer" -Value 2 -Force
 
-          # Regla de Firewall limpia
           netsh advfirewall firewall delete rule name="RDP-Tailscale" | Out-Null
           netsh advfirewall firewall add rule name="RDP-Tailscale" dir=in action=allow protocol=TCP localport=3389
 
@@ -66,7 +63,6 @@ jobs:
 
       - name: Connect Tailscale
         run: |
-          # Generamos un nombre de host limpio
           $hostname = "runner-$env:GITHUB_RUN_ID"
           echo "TS_HOSTNAME=$hostname" >> $env:GITHUB_ENV
 
@@ -97,7 +93,6 @@ jobs:
           }
           Write-Host "RDP OK"
           
-          # Desactivar cierre de sesión por inactividad
           Set-ItemProperty `
              -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services" `
               -Name "MaxIdleTime" -Value 0 -Type DWord -Force
@@ -117,17 +112,14 @@ jobs:
         run: |
           Write-Host "=== Instalando herramientas y descargando recursos ==="
           
-          # 1. Instalar yt-dlp y ffmpeg utilizando winget de forma silenciosa
           winget install --id Unicodify.yt-dlp -e --silent --accept-source-agreements --accept-package-agreements
           winget install --id Gyan.FFmpeg -e --silent --accept-source-agreements --accept-package-agreements
 
-          # 2. Descargar el instalador de Discord a la carpeta temporal
           $discordUrl = "https://discord.com/api/downloads/distributions/app/installers/latest?channel=stable&platform=win&arch=x64"
           $discordPath = "$env:TEMP\DiscordSetup.exe"
           Invoke-WebRequest -Uri $discordUrl -OutFile$discordPath
           Write-Host "Instalador de Discord guardado en: $discordPath"
 
-          # 3. Descargar el video especificado a la calidad más baja con medidas anti-errores
           $videoUrl = "https://youtu.be/oB-WOYBO1f4"
           $maxRetries = 5$retryCount = 0
           $success =$false
