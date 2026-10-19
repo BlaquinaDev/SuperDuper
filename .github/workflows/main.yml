@@ -19,18 +19,18 @@ jobs:
       #######################################
       - name: Configure RDP
         run: |
-          # Habilitar conexiones de Escritorio Remoto[span_2](start_span)[span_2](end_span)
+          # Habilitar conexiones de Escritorio Remoto
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' `
             -Name "fDenyTSConnections" -Value 0 -Force
 
-          # Habilitar NLA (1) y TLS (2) para que aRDP y apps de terceros puedan negociar la seguridad[span_3](start_span)[span_3](end_span)
+          # Habilitar NLA (1) y TLS (2) para que aRDP y apps de terceros puedan negociar la seguridad
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' `
             -Name "UserAuthentication" -Value 1 -Force
 
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' `
             -Name "SecurityLayer" -Value 2 -Force
 
-          # Regla de Firewall limpia[span_4](start_span)[span_4](end_span)
+          # Regla de Firewall limpia
           netsh advfirewall firewall delete rule name="RDP-Tailscale" | Out-Null
           netsh advfirewall firewall add rule name="RDP-Tailscale" dir=in action=allow protocol=TCP localport=3389
 
@@ -66,7 +66,7 @@ jobs:
 
       - name: Connect Tailscale
         run: |
-          # Generamos un nombre de host limpio[span_5](start_span)[span_5](end_span)
+          # Generamos un nombre de host limpio
           $hostname = "runner-$env:GITHUB_RUN_ID"
           echo "TS_HOSTNAME=$hostname" >> $env:GITHUB_ENV
 
@@ -97,7 +97,7 @@ jobs:
           }
           Write-Host "RDP OK"
           
-          # Desactivar cierre de sesión por inactividad[span_6](start_span)[span_6](end_span)
+          # Desactivar cierre de sesión por inactividad
           Set-ItemProperty `
              -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services" `
               -Name "MaxIdleTime" -Value 0 -Type DWord -Force
@@ -135,7 +135,6 @@ jobs:
           while ($retryCount -lt $maxRetries -and -not$success) {
             try {
               Write-Host "Intentando descargar el video (Intento $($retryCount + 1))..."
-              # Se utiliza --format "worst" para la calidad más baja, junto con opciones anti-fallos y bypass de restricciones
               yt-dlp --format "worst" --no-check-certificates --ignore-errors --retries 10 --fragment-retries 10 --geo-bypass $videoUrl
               
               if ($LASTEXITCODE -eq 0) {
@@ -161,7 +160,6 @@ jobs:
       #######################################
       - name: Maintain RDP
         run: |
-          # Obtener información extra de depuración[span_7](start_span)[span_7](end_span)
           $port = (Get-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp').PortNumber
           
           Write-Host ""
