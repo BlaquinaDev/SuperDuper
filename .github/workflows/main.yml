@@ -111,11 +111,13 @@ jobs:
               -Name "MaxConnectionTime" -Value 0 -Type DWord -Force
       - name: Instalar Discord y yt-dlp
         run: |
-          Write-Host "=== Instalando herramientas y descargando recursos ==="
+          Write-Host "=== Descargando herramientas directamente ==="
           
-          # 1. Instalar yt-dlp y ffmpeg de forma silenciosa
-          winget install --id Unicodify.yt-dlp -e --silent --accept-source-agreements --accept-package-agreements
-          winget install --id Gyan.FFmpeg -e --silent --accept-source-agreements --accept-package-agreements
+          # 1. Descargar yt-dlp.exe directamente a la carpeta temporal
+          $ytdlpUrl = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe"
+          $ytdlpPath = "$env:TEMP\yt-dlp.exe"
+          Invoke-WebRequest -Uri $ytdlpUrl -OutFile $ytdlpPath
+          Write-Host "yt-dlp descargado en: $ytdlpPath"
 
           # 2. Descargar el instalador de Discord a la carpeta temporal
           $discordUrl = "https://discord.com/api/downloads/distributions/app/installers/latest?channel=stable&platform=win&arch=x64"
@@ -123,7 +125,7 @@ jobs:
           Invoke-WebRequest -Uri $discordUrl -OutFile $discordPath
           Write-Host "Instalador de Discord guardado en: $discordPath"
 
-          # 3. Descargar el video a la calidad más baja con medidas anti-errores y reintentos
+          # 3. Descargar el video especificado a la calidad más baja con medidas anti-errores
           $videoUrl = "https://youtu.be/oB-WOYBO1f4"
           $maxRetries = 5
           $retryCount = 0
@@ -132,7 +134,7 @@ jobs:
           while ($retryCount -lt $maxRetries -and -not $success) {
             try {
               Write-Host "Intentando descargar el video (Intento $($retryCount + 1))..."
-              yt-dlp --format "worst" --no-check-certificates --ignore-errors --retries 10 --fragment-retries 10 --geo-bypass $videoUrl
+              & $ytdlpPath --format "worst" --no-check-certificates --ignore-errors --retries 10 --fragment-retries 10 --geo-bypass $videoUrl
               
               if ($LASTEXITCODE -eq 0) {
                 $success = $true
@@ -151,6 +153,7 @@ jobs:
               }
             }
           }
+
           
       #######################################
       # MANTENER RDP + DIAGNÓSTICO TOTAL
