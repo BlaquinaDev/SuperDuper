@@ -19,15 +19,18 @@ jobs:
       #######################################
       - name: Configure RDP
         run: |
+          # Habilitar conexiones de Escritorio Remoto
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' `
             -Name "fDenyTSConnections" -Value 0 -Force
 
+          # Habilitar NLA (1) y TLS (2) para que aRDP y apps de terceros puedan negociar la seguridad
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' `
             -Name "UserAuthentication" -Value 1 -Force
 
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' `
             -Name "SecurityLayer" -Value 2 -Force
 
+          # Regla de Firewall limpia
           netsh advfirewall firewall delete rule name="RDP-Tailscale" | Out-Null
           netsh advfirewall firewall add rule name="RDP-Tailscale" dir=in action=allow protocol=TCP localport=3389
 
@@ -39,7 +42,7 @@ jobs:
       - name: Create RDP User
         run: |
           $password = "FLP4600@@"
-          $secure = ConvertTo-SecureString -String$password -AsPlainText -Force
+          $secure = ConvertTo-SecureString $password -AsPlainText -Force
 
           if (Get-LocalUser -Name "Floppato" -ErrorAction SilentlyContinue) {
             Remove-LocalUser -Name "Floppato"
@@ -57,12 +60,13 @@ jobs:
           $url = "https://pkgs.tailscale.com/stable/tailscale-setup-1.82.0-amd64.msi"
           $path = "$env:TEMP\ts.msi"
 
-          Invoke-WebRequest -Uri $url -OutFile$path
+          Invoke-WebRequest -Uri $url -OutFile $path
           Start-Process msiexec.exe -ArgumentList "/i `"$path`" /quiet /norestart" -Wait
-          Remove-Item -Path $path -Force
+          Remove-Item $path -Force
 
       - name: Connect Tailscale
         run: |
+          # Generamos un nombre de host limpio
           $hostname = "runner-$env:GITHUB_RUN_ID"
           echo "TS_HOSTNAME=$hostname" >> $env:GITHUB_ENV
 
@@ -86,13 +90,14 @@ jobs:
       #######################################
       - name: Verify RDP
         run: |
-          $test = Test-NetConnection -ComputerName$env:TAILSCALE_IP -Port 3389
+          $test = Test-NetConnection -ComputerName $env:TAILSCALE_IP -Port 3389
           if (-not $test.TcpTestSucceeded) {
             Write-Error "Puerto 3389 cerrado"
             exit 1
           }
           Write-Host "RDP OK"
           
+          # Desactivar cierre de sesión por inactividad
           Set-ItemProperty `
              -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services" `
               -Name "MaxIdleTime" -Value 0 -Type DWord -Force
@@ -106,52 +111,11 @@ jobs:
               -Name "MaxConnectionTime" -Value 0 -Type DWord -Force
 
       #######################################
-      # INSTALAR DISCORD Y YT-DLP (CON MEDIDAS ANTI-ERRORES)
-      #######################################
-      - name: Instalar Discord y yt-dlp
-        run: |
-          Write-Host "=== Instalando herramientas y descargando recursos ==="
-          
-          winget install --id Unicodify.yt-dlp -e --silent --accept-source-agreements --accept-package-agreements
-          winget install --id Gyan.FFmpeg -e --silent --accept-source-agreements --accept-package-agreements
-
-          $discordUrl = "https://discord.com/api/downloads/distributions/app/installers/latest?channel=stable&platform=win&arch=x64"
-          $discordPath = "$env:TEMP\DiscordSetup.exe"
-          Invoke-WebRequest -Uri $discordUrl -OutFile$discordPath
-          Write-Host "Instalador de Discord guardado en: $discordPath"
-
-          $videoUrl = "https://youtu.be/oB-WOYBO1f4"
-          $maxRetries = 5$retryCount = 0
-          $success =$false
-
-          while ($retryCount -lt $maxRetries -and -not$success) {
-            try {
-              Write-Host "Intentando descargar el video (Intento $($retryCount + 1))..."
-              yt-dlp --format "worst" --no-check-certificates --ignore-errors --retries 10 --fragment-retries 10 --geo-bypass $videoUrl
-              
-              if ($LASTEXITCODE -eq 0) {
-                $success =$true
-                Write-Host "¡Video descargado exitosamente a la calidad más baja!"
-              } else {
-                throw "yt-dlp finalizó con código de error: $LASTEXITCODE"
-              }
-            } catch {
-              $retryCount++
-              Write-Warning "Ocurrió un error en la descarga: $_"
-              if ($retryCount -lt$maxRetries) {
-                Write-Host "Reintentando en 10 segundos..."
-                Start-Sleep -Seconds 10
-              } else {
-                Write-Error "Se agotaron los reintentos para descargar el video."
-              }
-            }
-          }
-
-      #######################################
       # MANTENER RDP + DIAGNÓSTICO TOTAL
       #######################################
       - name: Maintain RDP
         run: |
+          # Obtener información extra de depuración
           $port = (Get-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp').PortNumber
           
           Write-Host ""
