@@ -39,7 +39,7 @@ jobs:
       - name: Create RDP User
         run: |
           $password = "FLP4600@@"
-          $secure = ConvertTo-SecureString$password -AsPlainText -Force
+          $secure = ConvertTo-SecureString -String$password -AsPlainText -Force
 
           if (Get-LocalUser -Name "Floppato" -ErrorAction SilentlyContinue) {
             Remove-LocalUser -Name "Floppato"
@@ -59,7 +59,7 @@ jobs:
 
           Invoke-WebRequest -Uri $url -OutFile$path
           Start-Process msiexec.exe -ArgumentList "/i `"$path`" /quiet /norestart" -Wait
-          Remove-Item $path -Force
+          Remove-Item -Path $path -Force
 
       - name: Connect Tailscale
         run: |
